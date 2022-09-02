@@ -98,7 +98,7 @@ class IC_SharedFunctions_Class
     ; returns this class's version information (string)
     GetVersion()
     {
-        return "v2.5.7, 2022-08-22"
+        return "v2.6.1, 2022-08-30"
     }
 
     ;Gets data from JSON file
@@ -326,7 +326,6 @@ class IC_SharedFunctions_Class
         ; }
         timeout := 33
         directedInputStart := A_TickCount
-        ;hwnd := "ahk_exe IdleDragons.exe"
         hwnd := this.Hwnd
         ControlFocus,, ahk_id %hwnd%
         ;while (ErrorLevel AND A_TickCount - directedInputStart < timeout * 10)  ; testing reliability
@@ -473,7 +472,7 @@ class IC_SharedFunctions_Class
         ; try to progress
         this.DirectedInput(,,"{Right}")
         this.ToggleAutoProgress(1)
-        this.ModronResetZone := this.Memory.GetCoreTargetAreaByInstance(this.Memory.ReadActiveGameInstance()) ; once per zone in case user changes it mid run.
+        this.ModronResetZone := this.Memory.GetModronResetArea() ; once per zone in case user changes it mid run.
         g_PreviousZoneStartTime := A_TickCount
         Critical, Off
     }
@@ -494,7 +493,7 @@ class IC_SharedFunctions_Class
         if (dtCurrentZoneTime > 45 AND fallBackTries < 3 AND dtCurrentZoneTime - lastCheck > 15) ; second check - Fall back to previous zone and try to continue
         {
             ; reset memory values in case they missed an update.
-            this.Hwnd := WinExist( "ahk_exe IdleDragons.exe" )
+            this.Hwnd := WinExist( "ahk_exe " . g_userSettings[ "ExeName"] )
             this.Memory.OpenProcessReader()
             this.ResetServerCall()
             ; try a fall back
@@ -637,16 +636,17 @@ class IC_SharedFunctions_Class
         if ( string != "" )
             string := ": " . string
         g_SharedData.LoopString := "Closing IC" . string
-        if WinExist( "ahk_exe IdleDragons.exe" )
-            SendMessage, 0x112, 0xF060,,, ahk_exe IdleDragons.exe,,,, 10000 ; WinClose
+        sendMessageString := "ahk_exe " . g_userSettings[ "ExeName"]
+        if WinExist( "ahk_exe " . g_userSettings[ "ExeName"] )
+            SendMessage, 0x112, 0xF060,,, %sendMessageString%,,,, 10000 ; WinClose
         StartTime := A_TickCount
         ElapsedTime := 0
-        while ( WinExist( "ahk_exe IdleDragons.exe" ) AND ElapsedTime < 10000 )
+        while ( WinExist( "ahk_exe " . g_userSettings[ "ExeName"] ) AND ElapsedTime < 10000 )
         {
             Sleep, 200
             ElapsedTime := A_TickCount - StartTime
         }
-        while ( WinExist( "ahk_exe IdleDragons.exe" ) ) ; Kill after 10 seconds.
+        while ( WinExist( "ahk_exe " . g_userSettings[ "ExeName"] ) ) ; Kill after 10 seconds.
             WinKill
         return
     }
@@ -668,18 +668,19 @@ class IC_SharedFunctions_Class
                 StartTime := A_TickCount
                 ElapsedTime := 0
                 g_SharedData.LoopString := "Opening IC.."
-                programLoc := g_UserSettings[ "InstallPath" ] . g_UserSettings ["ExeName" ]
+                programLoc := g_UserSettings[ "InstallPath" ]
                 Run, %programLoc%
                 Sleep, %waitForProcessTime%
                 while(ElapsedTime < 10000 AND !this.PID )
                 {
                     ElapsedTime := A_TickCount - StartTime
-                    Process, Exist, IdleDragons.exe
+                    existingProcessID := g_userSettings[ "ExeName"]
+                    Process, Exist, %existingProcessID%
                     this.PID := ErrorLevel
                 }
             }
             ; Process exists, wait for the window:
-            while(!(this.Hwnd := WinExist( "ahk_exe IdleDragons.exe" )) AND ElapsedTime < 32000)
+            while(!(this.Hwnd := WinExist( "ahk_exe " . g_userSettings[ "ExeName"] )) AND ElapsedTime < 32000)
             {
                 WinGetActiveTitle, savedActive
                 this.SavedActiveWindow := savedActive
@@ -757,7 +758,7 @@ class IC_SharedFunctions_Class
     ;Reopens Idle Champions if it is closed. Calls RecoverFromGameClose after opening IC. Returns true if window still exists.
     SafetyCheck()
     {
-        if (Not WinExist( "ahk_exe IdleDragons.exe" ))
+        if (Not WinExist( "ahk_exe " . g_userSettings[ "ExeName"] ))
         {
             if(this.OpenIC() == -1)
             {
@@ -773,8 +774,9 @@ class IC_SharedFunctions_Class
          ; game loaded but can't read zone? failed to load proper on last load? (Tests if game started without script starting it)
         else if ( this.Memory.ReadCurrentZone() == "" )
         {
-            this.Hwnd := WinExist( "ahk_exe IdleDragons.exe" )
-            Process, Exist, IdleDragons.exe
+            this.Hwnd := WinExist( "ahk_exe " . g_userSettings[ "ExeName"] )
+            existingProcessID := g_userSettings[ "ExeName"]
+            Process, Exist, %existingProcessID%
             this.PID := ErrorLevel
             this.Memory.OpenProcessReader()
             this.ResetServerCall()
@@ -782,6 +784,7 @@ class IC_SharedFunctions_Class
         return true
     }
 
+    ; Checks for rollbacks after a stack restart.
     BadSaveTest()
     {
         if(this.CurrentZone != "" and this.CurrentZone - 1 > g_SF.Memory.ReadCurrentZone())
@@ -796,7 +799,7 @@ class IC_SharedFunctions_Class
         static gameLoaded := false
         if(this.Memory.ReadCurrentZone() == "")
         {
-            if (Not WinExist( "ahk_exe IdleDragons.exe" ))
+            if (Not WinExist( "ahk_exe " . g_userSettings[ "ExeName"] ))
             {
                 gameLoaded := false
             }
@@ -1089,7 +1092,7 @@ class IC_SharedFunctions_Class
         consume := this.IsBrivMetalborn() ? -.032 : -.04  ;Default := 4%, SteelBorn := 3.2%
         skipAmount := ActiveEffectKeySharedFunctions.Briv.BrivUnnaturalHasteHandler.ReadSkipAmount()
         skipChance := ActiveEffectKeySharedFunctions.Briv.BrivUnnaturalHasteHandler.ReadSkipChance()
-        distance := this.Memory.GetCoreTargetAreaByInstance(this.Memory.ReadActiveGameInstance())
+        distance := this.Memory.GetModronResetArea()
         ; skipAmount == 1 is a special case where Briv won't use stacks when he skips 0 areas.
         if (worstCase)
             jumps := skipAmount == 1 ? Floor(distance / (skipAmount+1)) : Floor(distance / (skipChance >= 1 ? skipAmount + 1 : skipAmount))
@@ -1121,7 +1124,7 @@ class IC_SharedFunctions_Class
     CalculateBrivStacksConsumedToReachModronResetZone()
     {
         stacks := ActiveEffectKeySharedFunctions.Briv.BrivUnnaturalHasteHandler.ReadHasteStacks()
-        return stacks - this.CalculateBrivStacksLeftAtTargetZone(this.Memory.ReadCurrentZone(), this.Memory.GetCoreTargetAreaByInstance(this.Memory.ReadActiveGameInstance()))
+        return stacks - this.CalculateBrivStacksLeftAtTargetZone(this.Memory.ReadCurrentZone(), this.Memory.GetModronResetArea())
     }
 
     ; Calculates the farthest zone Briv expects to jump to with his current stacks on his current zone.  avgMinOrMax: avg = 0, min = 1, max = 2.

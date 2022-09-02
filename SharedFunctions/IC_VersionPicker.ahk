@@ -111,18 +111,20 @@ ChooseRecommendation()
     defaultPaths := []
     defaultPaths[1] := "C:\Program Files (x86)\Steam\steamapps\common\IdleChampions\" ; Steam
     defaultPaths[2] := "C:\Program Files\Epic Games\IdleChampions" ; Epic
-    defaultPaths[3] := "" ; Kartridge
+    defaultPaths[3] := "%AppData%\..\Local\Kartridge.kongregate.com\games\309647" ; Kartridge
     defaultPaths[4] := "" ; CNE
     settingsJSONPath := A_LineFile . "\..\..\Settings.json"
     settings := LoadObjectFromJSON( settingsJSONPath )
     settingsGamePath := settings.InstallPath
 
     hWnd := WinExist("ahk_exe IdleDragons.exe")
+    if(!hWnd)
+        hWnd := WinExist("ahk_exe " . settings.ExeName )
     WinGet, pPath, ProcessPath, % "ahk_id " hWnd
     exePath := pPath . "\..\"
 
-    
-    platform := CheckPlatformByPath(exePath)
+    if(exePath != "\..\")
+        platform := CheckPlatformByPath(exePath)
     if(!platform)
         platform := CheckPlatformByPath(settingsGamePath)
     if(!platform AND hWnd)
@@ -134,7 +136,8 @@ ChooseRecommendation()
         platform := CheckPlatformByPath(gamePath, false)
     }
 
-    version := CheckVersionByPath(exePath)
+    if(exePath != "\..\")
+        version := CheckVersionByPath(exePath)
     checkVersion := platform ? true : false
     if(!version)
         version := CheckVersionByPath(settingsGamePath, checkVersion)
@@ -222,8 +225,7 @@ CheckPlatformByPathContents(gamePath)
     CNELauncherPath := gamePath . "..\IdleDragonsLauncher.exe"
     if(FileExist(CNELauncherPath))
         return "CNE"
-    ; check path for Kartridge ?
-    if(Kartridge)
+    if(InStr(gamePath, "Kartridge", False))
         return "Kartridge"
     return ""
 }
@@ -359,7 +361,7 @@ IsVersionMatchToImports(platform, version)
 
 GetImportsVersionByPlatform(platform)
 {
-    if(platform == "Steam" OR platform == "EGS")
+    if(platform == "Steam" OR platform == "EGS" OR platform == "Kartridge")
         importsVersion := g_ImportsGameVersion64 . g_ImportsGameVersionPostFix64
     else if(platform == "CNE")
         importsVersion := g_ImportsGameVersion32 . g_ImportsGameVersionPostFix32
